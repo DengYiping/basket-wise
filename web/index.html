@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
+    <meta name="basket-wise-mode" content="local" />
     <title>Basket Wise</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
@@ -19,6 +20,7 @@
         </div>
         <span id="mode" class="pill">Connecting</span>
       </header>
+      <p id="guest-notice" class="fine-print" role="status" hidden></p>
       <div id="message" role="status" aria-live="polite" hidden></div>
       <section id="empty" class="empty" hidden>
         <span class="empty-icon" aria-hidden="true">↗</span>
@@ -79,7 +81,8 @@
                 required
             /></label>
             <label
-              >Price / unit (€)<input
+              ><span id="item-price-label">Price / unit</span
+              ><input
                 id="item-price"
                 name="price"
                 placeholder="0.00"
@@ -157,16 +160,21 @@
             id="start-store"
             placeholder="e.g. Dunnes, Tesco, Lidl"
             maxlength="120" /></label
-        ><label
-          >Spending milestones (€)<input
-            id="start-thresholds"
-            value="25, 50"
-            required
+        ><label>Currency<select id="start-currency" required></select> </label>
+        <p id="start-currency-note" class="fine-print"></p>
+        <label
+          ><span id="start-threshold-label">Spending milestones</span
+          ><input id="start-thresholds" value="25, 50" required
         /></label>
         <p class="fine-print">
-          Comma-separated euro amounts. These are your tracking targets, not
-          store voucher terms.
+          Comma-separated amounts in your chosen currency. These are your
+          tracking targets, not store voucher terms.
         </p>
+        <label id="replace-guest-label" class="checkbox-label" hidden>
+          <input id="replace-guest" type="checkbox" />
+          Replace this widget's current guest basket. It will not be kept in a
+          history.
+        </label>
         <button type="submit" class="primary">Start shopping →</button>
       </form>
     </dialog>
@@ -221,14 +229,12 @@
           </button>
         </div>
         <p>
-          Enter euro amounts separated by commas. These are personal targets,
-          not verified voucher terms.
+          Enter amounts in this shop's currency, separated by commas. These are
+          personal targets, not verified voucher terms.
         </p>
         <label
-          >Milestones (€)<input
-            id="threshold-input"
-            value="25, 50"
-            required /></label
+          ><span id="threshold-label">Milestones</span
+          ><input id="threshold-input" value="25, 50" required /></label
         ><button type="submit" class="primary">Save milestones</button>
       </form>
     </dialog>

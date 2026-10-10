@@ -1,0 +1,13 @@
+{
+  "name": "basket-wise-guest-oauth-poc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Isolated, local-only guest OAuth compatibility probe; not the Basket Wise app.",
+  "scripts": {
+    "start": "node --import tsx src/main.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx --test --test-concurrency=1 tests/*.test.ts",
+    "check": "npm run typecheck && npm test"
+  }
+}

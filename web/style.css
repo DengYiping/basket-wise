@@ -216,13 +216,18 @@ h1 {
 .total-card .eyebrow {
   color: #cad7c2;
 }
+.total-card > div:first-child {
+  min-width: 0;
+  flex: 1;
+}
 .total {
-  font-size: 54px;
+  font-size: clamp(24px, 7vw, 54px);
   line-height: 1.18;
   letter-spacing: -2.5px;
   font-weight: 550;
   margin-top: 8px;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 .total-caption {
   font-size: 11px;
@@ -594,9 +599,18 @@ dialog label {
   }
   .total-card {
     padding: 23px;
+    flex-wrap: wrap;
+    gap: 16px;
   }
   .total {
-    font-size: 48px;
+    font-size: clamp(24px, 8vw, 40px);
+  }
+  .total-aside {
+    align-items: flex-start;
+    width: 100%;
+  }
+  .total-note {
+    display: none;
   }
   .total-note {
     font-size: 20px;

@@ -1,7 +1,10 @@
 import { App } from "@modelcontextprotocol/ext-apps";
 import {
-  formatEuro,
-  parseEuro,
+  currencyDigits,
+  formatMoney,
+  moneyInputValue,
+  parseMoney,
+  SUPPORTED_CURRENCIES,
   quantitySchema,
   thresholdsSchema,
   type Basket,
@@ -9,17 +12,28 @@ import {
   type Item,
 } from "../src/domain.js";
 import { createDemo } from "./demo.js";
+import { calculateGuest, guestView, type GuestResult } from "../src/guest.js";
+import { GuestSession, type WidgetStorage } from "./guest-state.js";
 import { byId, element, randomUUID } from "./utils.js";
 
-type Envelope = Partial<BasketResult> & {
+type Envelope = Partial<Omit<BasketResult, "basket">> & {
+  basket?: Basket | null;
   items?: (Item & { tripId: string })[];
-  trips?: { id: string; store: string; createdAt: string }[];
+  trips?: { id: string; store: string; createdAt: string; currency: string }[];
 };
 const demo =
   window.parent === window ||
   new URLSearchParams(window.location.search).has("demo");
+const guest =
+  document
+    .querySelector('meta[name="basket-wise-mode"]')
+    ?.getAttribute("content") === "guest" ||
+  new URLSearchParams(window.location.search).has("guest");
+const guestSession = new GuestSession(
+  () => (window as Window & { openai?: WidgetStorage }).openai,
+);
 const app = new App(
-  { name: "Basket Wise", version: "0.1.0" },
+  { name: "Basket Wise", version: "0.4.0" },
   {},
   { autoResize: true },
 );
@@ -28,6 +42,11 @@ let basket: Basket | null = null;
 let busy = false;
 let selectedExpiry: string | null = null;
 const pendingOperations = new Map<string, string>();
+const money = (value: number) => formatMoney(value, basket?.currency ?? "EUR");
+const editableMoney = (value: number, currency: string) =>
+  moneyInputValue(value, currency)
+    .replace(/(\.\d*?)0+$/, "$1")
+    .replace(/\.$/, "");
 
 function message(text: string, error = false) {
   const node = byId("message");
@@ -37,10 +56,15 @@ function message(text: string, error = false) {
 }
 
 function accept(result: Envelope) {
-  if ("basket" in result) basket = result.basket ?? null;
+  if ("basket" in result) {
+    // Do not carry a partially entered price into a different-currency trip.
+    if (basket?.id !== result.basket?.id)
+      byId<HTMLFormElement>("add-form").reset();
+    basket = result.basket ?? null;
+  }
   if (result.newlyReachedThresholdsCents?.length) {
     message(
-      `Milestone reached: ${result.newlyReachedThresholdsCents.map(formatEuro).join(" and ")} in your milestone subtotal.`,
+      `Milestone reached: ${result.newlyReachedThresholdsCents.map(money).join(" and ")} in your milestone subtotal.`,
     );
   }
   render();
@@ -50,6 +74,48 @@ async function invoke(
   name: string,
   args: Record<string, unknown> = {},
 ): Promise<Envelope> {
+  if (guest) {
+    const result = await guestSession.invoke(
+      name,
+      args,
+      async (state, action) => {
+        if (
+          demo ||
+          ["get_basket", "list_trips", "list_expiring_items"].includes(name)
+        )
+          return calculateGuest({ state, action });
+        const response = await app.callServerTool({
+          name: "guest_basket",
+          arguments: { state, action },
+        });
+        if (response.isError)
+          throw new Error(
+            response.content
+              ?.filter((part) => part.type === "text")
+              .map((part) => part.text)
+              .join(" ") || "Guest calculation failed. Retry this change.",
+          );
+        return response.structuredContent as GuestResult;
+      },
+    );
+    if (!demo) {
+      // Make button edits visible to the model before the next user turn.
+      try {
+        await app.updateModelContext({
+          structuredContent: { guestState: guestSession.state },
+          content: [
+            {
+              type: "text",
+              text: "Current temporary Basket Wise guest state. Use this complete state for guest_basket; there is no server-side basket lookup.",
+            },
+          ],
+        });
+      } catch {
+        /* The visible basket and widget snapshot still work without model context support. */
+      }
+    }
+    return result;
+  }
   if (demo) return (await demoCall(name, args)) as Envelope;
   const result = await app.callServerTool({ name, arguments: args });
   if (result.isError) {
@@ -104,7 +170,7 @@ async function refreshTrips() {
       const option = element(
         "option",
         undefined,
-        `${trip.store} · ${new Date(trip.createdAt).toLocaleDateString("en-IE")}`,
+        `${trip.store} · ${trip.currency} · ${new Date(trip.createdAt).toLocaleDateString("en-IE")}`,
       );
       option.value = trip.id;
       return option;
@@ -134,11 +200,7 @@ function itemRow(item: Basket["items"][number]) {
   info.append(element("p", "item-name", item.name));
   const detail = element("div", "item-detail");
   detail.append(
-    element(
-      "span",
-      undefined,
-      `${formatEuro(item.unitPriceCents)} / ${item.unit}`,
-    ),
+    element("span", undefined, `${money(item.unitPriceCents)} / ${item.unit}`),
   );
   const expiry = element(
     "button",
@@ -204,9 +266,7 @@ function itemRow(item: Basket["items"][number]) {
     actions.append(
       element("span", "fine-print", `× ${item.quantity} ${item.unit}`),
     );
-  actions.append(
-    element("span", "item-price", formatEuro(item.lineTotalCents)),
-  );
+  actions.append(element("span", "item-price", money(item.lineTotalCents)));
   if (active) {
     const remove = element("button", "icon-button", "×");
     remove.setAttribute("aria-label", `Remove ${item.name}`);
@@ -220,15 +280,31 @@ function itemRow(item: Basket["items"][number]) {
 }
 
 function render() {
+  if (guest) {
+    byId("guest-notice").hidden = false;
+    byId("guest-notice").textContent =
+      `${demo ? "Preview sample only. " : ""}Guest mode · this shopping trip only · no sign-in. Stored in temporary widget state; sent to Cloudflare for calculations, not saved in our database. Recovery across chats or devices is not guaranteed. ${guestSession.storageWarning}`;
+    byId("trip-select").hidden = true;
+  }
   byId("app").setAttribute("aria-busy", String(busy));
   byId("empty").hidden = basket !== null;
   byId("basket-content").hidden = basket === null;
   if (basket) {
     const active = basket.status === "active";
     byId("store-name").textContent = basket.store;
-    byId("total").textContent = formatEuro(basket.totalCents);
+    byId("total").textContent = money(basket.totalCents);
     byId("item-count").textContent =
-      `${basket.items.length} ${basket.items.length === 1 ? "line" : "lines"} in your basket · EUR`;
+      `${basket.items.length} ${basket.items.length === 1 ? "line" : "lines"} in your basket · ${basket.currency}`;
+    byId("item-price-label").textContent = `Price / unit (${basket.currency})`;
+    byId<HTMLInputElement>("item-price").placeholder = moneyInputValue(
+      0,
+      basket.currency,
+    );
+    byId<HTMLInputElement>("item-price").inputMode = currencyDigits(
+      basket.currency,
+    )
+      ? "decimal"
+      : "numeric";
     byId("basket-count").textContent = String(basket.items.length);
     byId("trip-status").textContent = active
       ? "● Shopping in progress"
@@ -239,9 +315,11 @@ function render() {
     byId("edit-thresholds").hidden = !active;
     byId("checkout-note").textContent = active
       ? "Your estimate, not a checkout receipt."
-      : "Purchase saved. You can still add expiry dates.";
+      : guest
+        ? "Shopping finished. This summary and any dates remain temporary, in this widget only."
+        : "Purchase saved. You can still add expiry dates.";
     byId("qualifying-note").textContent =
-      `${formatEuro(basket.thresholdSubtotalCents)} included in milestones. Personal targets only; actual voucher rules may differ.`;
+      `${money(basket.thresholdSubtotalCents)} included in milestones. Personal targets only; actual voucher rules may differ.`;
     byId("thresholds").replaceChildren(
       ...basket.thresholds.map((threshold) => {
         const card = element(
@@ -250,20 +328,20 @@ function render() {
         );
         const header = element("div", "threshold-header");
         header.append(
-          element("strong", undefined, formatEuro(threshold.amountCents)),
+          element("strong", undefined, money(threshold.amountCents)),
           element(
             "span",
             "threshold-status",
             threshold.reached
               ? "✓ Reached"
-              : `${formatEuro(threshold.remainingCents)} to go`,
+              : `${money(threshold.remainingCents)} to go`,
           ),
         );
         const progress = element("div", "progress");
         progress.setAttribute("role", "progressbar");
         progress.setAttribute(
           "aria-label",
-          `${formatEuro(threshold.amountCents)} milestone`,
+          `${money(threshold.amountCents)} milestone`,
         );
         progress.setAttribute("aria-valuemin", "0");
         progress.setAttribute("aria-valuemax", String(threshold.amountCents));
@@ -297,29 +375,70 @@ function render() {
   });
 }
 
+const currencySelect = byId<HTMLSelectElement>("start-currency");
+const currencyNames = new Intl.DisplayNames(["en"], { type: "currency" });
+currencySelect.replaceChildren(
+  ...SUPPORTED_CURRENCIES.map((code) => {
+    const option = element(
+      "option",
+      undefined,
+      `${code} — ${currencyNames.of(code) ?? code}`,
+    );
+    option.value = code;
+    return option;
+  }),
+);
+function updateStartCurrency() {
+  const code = currencySelect.value;
+  const digits = currencyDigits(code);
+  byId("start-threshold-label").textContent = `Spending milestones (${code})`;
+  byId("start-currency-note").textContent = digits
+    ? `Use a decimal point and up to ${digits} decimal places. One currency per shop; no exchange-rate conversion.`
+    : "Use whole-number amounts. One currency per shop; no exchange-rate conversion.";
+}
+currencySelect.onchange = updateStartCurrency;
+
 byId("start").onclick = byId("new-trip").onclick = () => {
+  const replacing =
+    guest && (Boolean(basket) || Boolean(guestSession.storageWarning));
+  byId("replace-guest-label").hidden = !replacing;
+  byId<HTMLInputElement>("replace-guest").required = replacing;
+  byId<HTMLInputElement>("replace-guest").checked = false;
+  currencySelect.value = basket?.currency ?? "EUR";
+  updateStartCurrency();
   byId<HTMLInputElement>("start-store").value = "";
   byId<HTMLInputElement>("start-thresholds").value =
-    basket?.thresholdsCents.map((value) => String(value / 100)).join(", ") ??
-    "25, 50";
+    basket?.thresholdsCents
+      .map((value) => editableMoney(value, basket!.currency))
+      .join(", ") ?? "25, 50";
   byId<HTMLDialogElement>("start-dialog").showModal();
 };
 byId("close-start").onclick = () =>
   byId<HTMLDialogElement>("start-dialog").close();
 byId<HTMLFormElement>("start-form").onsubmit = async (event) => {
   event.preventDefault();
+  if (
+    guest &&
+    byId<HTMLInputElement>("replace-guest").required &&
+    !byId<HTMLInputElement>("replace-guest").checked
+  )
+    return;
   try {
+    const currency = currencySelect.value;
     const thresholdsCents = thresholdsSchema.parse(
       byId<HTMLInputElement>("start-thresholds")
         .value.split(",")
-        .map((value) => parseEuro(value.trim())),
+        .map((value) => parseMoney(value.trim(), currency)),
     );
     const store =
       byId<HTMLInputElement>("start-store").value.trim() || "Supermarket";
-    if (await run("start_trip", { store, thresholdsCents }, true))
+    if (await run("start_trip", { store, thresholdsCents, currency }, true))
       byId<HTMLDialogElement>("start-dialog").close();
   } catch {
-    message("Enter 1–10 positive euro milestones, separated by commas.", true);
+    message(
+      `Enter 1–10 positive ${currencySelect.value} milestones, separated by commas, using the currency's decimal precision.`,
+      true,
+    );
   }
 };
 byId<HTMLSelectElement>("trip-select").onchange = (event) => {
@@ -334,7 +453,10 @@ byId<HTMLFormElement>("add-form").onsubmit = async (event) => {
       {
         tripId: basket.id,
         name: byId<HTMLInputElement>("item-name").value.trim(),
-        unitPriceCents: parseEuro(byId<HTMLInputElement>("item-price").value),
+        unitPriceCents: parseMoney(
+          byId<HTMLInputElement>("item-price").value,
+          basket.currency,
+        ),
         quantity: quantitySchema.parse(
           Number(byId<HTMLInputElement>("item-quantity").value),
         ),
@@ -385,8 +507,9 @@ byId<HTMLFormElement>("expiry-form").onsubmit = async (event) => {
 byId("edit-thresholds").onclick = () => {
   if (!basket) return;
   byId<HTMLInputElement>("threshold-input").value = basket.thresholdsCents
-    .map((amount) => String(amount / 100))
+    .map((amount) => editableMoney(amount, basket!.currency))
     .join(", ");
+  byId("threshold-label").textContent = `Milestones (${basket.currency})`;
   byId<HTMLDialogElement>("threshold-dialog").showModal();
 };
 byId("close-thresholds").onclick = () =>
@@ -398,14 +521,17 @@ byId<HTMLFormElement>("threshold-form").onsubmit = async (event) => {
     const thresholdsCents = thresholdsSchema.parse(
       byId<HTMLInputElement>("threshold-input")
         .value.split(",")
-        .map((value) => parseEuro(value.trim())),
+        .map((value) => parseMoney(value.trim(), basket!.currency)),
     );
     if (
       await run("set_thresholds", { tripId: basket.id, thresholdsCents }, true)
     )
       byId<HTMLDialogElement>("threshold-dialog").close();
   } catch {
-    message("Enter 1–10 positive euro amounts, separated by commas.", true);
+    message(
+      `Enter 1–10 positive ${basket.currency} amounts, separated by commas, using the currency's decimal precision.`,
+      true,
+    );
   }
 };
 
@@ -475,14 +601,45 @@ byId("basket-tab").onclick = () => {
 };
 
 async function initialize() {
+  if (guest) guestSession.restore();
   if (demo) {
-    byId("mode").textContent = "Preview · not saved";
+    byId("mode").textContent = guest
+      ? "Guest preview · not saved"
+      : "Preview · not saved";
   } else {
     app.ontoolresult = (result) => {
-      accept((result.structuredContent ?? {}) as Envelope);
+      if (guest) {
+        const incoming = result.structuredContent as GuestResult | undefined;
+        // An open notification must never replace an already-restored basket.
+        if (!incoming?.state || incoming.state.revision === 0) {
+          accept(guestView(guestSession.state));
+          return;
+        }
+        void guestSession
+          .accept(incoming)
+          .then(accept)
+          .catch((error: unknown) =>
+            message(
+              error instanceof Error
+                ? error.message
+                : "This response could not be restored.",
+              true,
+            ),
+          );
+      } else accept((result.structuredContent ?? {}) as Envelope);
     };
     await app.connect();
-    byId("mode").textContent = "Connected to chat";
+    if (guest) guestSession.restore();
+    byId("mode").textContent = guest
+      ? "Guest · temporary"
+      : "Connected to chat";
+  }
+  if (guest) {
+    window.addEventListener("openai:set_globals", () => {
+      if (guestSession.restore()) accept(guestView(guestSession.state));
+    });
+    accept(guestView(guestSession.state));
+    return;
   }
   await refreshTrips();
   accept(await invoke("get_basket"));

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Basket Wise — Shopping list</title>
+    <style>
+      /* WIDGET_STYLES */
+    </style>
+  </head>
+  <body>
+    <main id="app" aria-label="Basket Wise shopping list">
+      <header class="heading">
+        <div class="brand">Basket Wise</div>
+        <span class="badge" id="list-count">Shopping list</span>
+      </header>
+      <div class="heading-text">
+        <h1>Your shopping list</h1>
+        <p class="muted">
+          Across all your trips. Kept with your guest profile.
+        </p>
+      </div>
+      <p id="result" class="notice" role="status" aria-live="polite" hidden></p>
+      <p id="empty" class="muted">Loading your shopping list…</p>
+      <ul id="shopping-items" aria-label="Items to buy"></ul>
+      <button id="more" type="button" hidden>Show all items</button>
+      <form id="list-form" hidden>
+        <h2 id="form-title">Add to shopping list</h2>
+        <div class="fields">
+          <label class="name-field"
+            >Item name<input
+              id="name"
+              maxlength="120"
+              required
+              autocomplete="off"
+              placeholder="e.g. Milk"
+          /></label>
+          <label
+            >Quantity<input
+              id="quantity"
+              type="number"
+              min="0.001"
+              max="1000"
+              step="0.001"
+              value="1"
+              required
+          /></label>
+          <label
+            >Unit<select id="unit">
+              <option value="each">each</option>
+              <option value="kg">kg</option>
+              <option value="litre">litre</option>
+            </select></label
+          >
+        </div>
+        <label
+          >Note (optional)<input id="notes" maxlength="500" autocomplete="off"
+        /></label>
+        <div class="actions">
+          <button id="save" class="primary" type="button">Save item</button
+          ><button id="cancel-edit" type="button" hidden>Cancel edit</button>
+        </div>
+      </form>
+      <section id="purchase" class="delete-confirm" hidden>
+        <h2 id="purchase-title"></h2>
+        <p class="muted">
+          Enter the unit price in your current trip’s currency. The whole
+          shopping-list entry is removed only after a successful addition.
+        </p>
+        <label
+          >Unit price<input
+            id="price"
+            inputmode="decimal"
+            maxlength="12"
+            placeholder="0.00"
+        /></label>
+        <div class="actions">
+          <button id="purchase-confirm" type="button" class="primary">
+            Add to current trip</button
+          ><button id="purchase-cancel" type="button">Cancel</button>
+        </div>
+      </section>
+      <div class="actions">
+        <button id="toggle-form" class="primary" type="button" hidden>
+          Add an item</button
+        ><button id="refresh" type="button">Refresh list</button>
+      </div>
+      <p class="retention">
+        This list survives the 24-hour basket cleanup. It expires with your
+        guest profile after 90 days without list or basket activity. Removing a
+        trip item does not put it back here.
+      </p>
+    </main>
+    <script>
+      /* WIDGET_SCRIPT */
+    </script>
+  </body>
+</html>

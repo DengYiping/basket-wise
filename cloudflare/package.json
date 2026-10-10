@@ -1,0 +1,16 @@
+{
+  "name": "basket-wise-cloudflare",
+  "version": "0.5.3",
+  "private": true,
+  "type": "module",
+  "description": "Isolated durable guest deployment adapter; no deployment is performed by its checks.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "npm run build && node --import tsx --test --test-concurrency=1 tests/*.test.ts",
+    "check": "npm run typecheck && npm test",
+    "preview:pages": "node --import tsx scripts/preview-pages.mjs",
+    "preview:auth": "node --import tsx scripts/preview-auth.mjs",
+    "preview:widget": "npm run build && node --import tsx scripts/preview-widget.mjs"
+  }
+}

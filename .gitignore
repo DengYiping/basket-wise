@@ -10,3 +10,25 @@ coverage/
 *.sqlite-wal
 .DS_Store
 *.log
+.wrangler/
+.cloudflare/
+.dev.vars*
+.secrets*.json
+*.sqlite3
+*.db
+*.db-*
+*.pem
+*.key
+*.p12
+*.pfx
+*.zip
+*.har
+
+# Machine-specific production configuration and private review records.
+/cloudflare/deploy/cloudflare.config.ts
+/cloudflare/deploy/README.md
+/cloudflare/plugin-draft/README.md
+/cloudflare/plugin-draft/VERIFICATION.md
+/cloudflare/plugin-draft/OAUTH-PORTAL-BLOCKER.md
+/cloudflare/plugin-draft/PUBLIC-PAGES-DRAFT.md
+/cloudflare/plugin-draft/basket-wise-durable/plugin.json

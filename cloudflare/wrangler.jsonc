@@ -1,0 +1,33 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "basket-wise-durable",
+  "main": "dist/worker.js",
+  "compatibility_date": "2026-10-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "send_metrics": false,
+  "observability": { "enabled": false },
+  "durable_objects": {
+    "bindings": [
+      { "name": "VAULTS", "class_name": "GuestVault" },
+      { "name": "FLOWS", "class_name": "AuthorizationFlow" },
+      { "name": "CLEANUP", "class_name": "CleanupIndex" },
+      { "name": "CLIENTS", "class_name": "OAuthClients" },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["GuestVault", "AuthorizationFlow", "CleanupIndex"],
+    },
+    { "tag": "v2", "new_sqlite_classes": ["OAuthClients"] },
+  ],
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "2001",
+      "simple": { "limit": 120, "period": 60 },
+    },
+  ],
+}

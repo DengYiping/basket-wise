@@ -5,6 +5,8 @@ import { DatabaseSync } from "node:sqlite";
 import {
   MAX_ITEMS,
   addDays,
+  currencySchema,
+  defaultThresholds,
   dublinToday,
   summarize,
   tripSchema,
@@ -14,24 +16,72 @@ import {
   type Trip,
 } from "./domain.js";
 
-/** One private, single-user database. Never expose it as a shared public service. */
+/**
+ * One account-scoped view of the database. The hosting boundary must supply a
+ * verified owner ID; callers must never choose it in MCP tool arguments.
+ * The default owner preserves the existing, private local-only experience.
+ */
 export class BasketStore {
   private readonly db: DatabaseSync;
+  private readonly ownerId: string;
 
-  constructor(path: string) {
+  constructor(path: string, ownerId = "local") {
+    if (!ownerId.trim() || ownerId.length > 256) {
+      throw new Error("A nonempty, bounded account identity is required.");
+    }
+    this.ownerId = ownerId;
     if (path !== ":memory:")
       mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     this.db = new DatabaseSync(path);
     this.db.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA busy_timeout = 5000;
-      CREATE TABLE IF NOT EXISTS trips (
-        id TEXT PRIMARY KEY, created_at TEXT NOT NULL, payload TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS operations (
-        id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, trip_id TEXT NOT NULL
-      );
     `);
+    this.migrate();
+  }
+
+  private migrate(): void {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const columns = this.db.prepare("PRAGMA table_info(trips)").all();
+      const legacy =
+        columns.length > 0 &&
+        !columns.some((column) => column.name === "owner_id");
+      if (legacy) {
+        this.db.exec(`
+          ALTER TABLE trips RENAME TO legacy_trips;
+          ALTER TABLE operations RENAME TO legacy_operations;
+        `);
+      }
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS trips (
+          owner_id TEXT NOT NULL, id TEXT NOT NULL,
+          created_at TEXT NOT NULL, payload TEXT NOT NULL,
+          PRIMARY KEY (owner_id, id)
+        );
+        CREATE TABLE IF NOT EXISTS operations (
+          owner_id TEXT NOT NULL, id TEXT NOT NULL,
+          fingerprint TEXT NOT NULL, trip_id TEXT NOT NULL,
+          PRIMARY KEY (owner_id, id)
+        );
+        CREATE INDEX IF NOT EXISTS trips_owner_created ON trips (owner_id, created_at DESC);
+      `);
+      if (legacy) {
+        // The entire migration is atomic. Existing data belongs only to the
+        // local profile; it is never assigned to the first signed-in account.
+        this.db.exec(`
+          INSERT INTO trips SELECT 'local', id, created_at, payload FROM legacy_trips;
+          INSERT INTO operations SELECT 'local', id, fingerprint, trip_id FROM legacy_operations;
+          DROP TABLE legacy_operations;
+          DROP TABLE legacy_trips;
+        `);
+      }
+      this.db.exec("PRAGMA user_version = 1; COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      this.db.close();
+      throw error;
+    }
   }
 
   close(): void {
@@ -40,8 +90,8 @@ export class BasketStore {
 
   private load(id: string): Trip {
     const row = this.db
-      .prepare("SELECT payload FROM trips WHERE id = ?")
-      .get(id);
+      .prepare("SELECT payload FROM trips WHERE owner_id = ? AND id = ?")
+      .get(this.ownerId, id);
     if (!row) throw new Error("Shopping trip not found.");
     return tripSchema.parse(JSON.parse(row.payload as string));
   }
@@ -50,10 +100,15 @@ export class BasketStore {
     const validated = tripSchema.parse(trip);
     this.db
       .prepare(
-        `INSERT INTO trips (id, created_at, payload) VALUES (?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET payload = excluded.payload`,
+        `INSERT INTO trips (owner_id, id, created_at, payload) VALUES (?, ?, ?, ?)
+      ON CONFLICT(owner_id, id) DO UPDATE SET payload = excluded.payload`,
       )
-      .run(validated.id, validated.createdAt, JSON.stringify(validated));
+      .run(
+        this.ownerId,
+        validated.id,
+        validated.createdAt,
+        JSON.stringify(validated),
+      );
   }
 
   private change(
@@ -68,8 +123,10 @@ export class BasketStore {
     this.db.exec("BEGIN IMMEDIATE");
     try {
       const prior = this.db
-        .prepare("SELECT fingerprint, trip_id FROM operations WHERE id = ?")
-        .get(operationId);
+        .prepare(
+          "SELECT fingerprint, trip_id FROM operations WHERE owner_id = ? AND id = ?",
+        )
+        .get(this.ownerId, operationId);
       if (prior) {
         if (prior.fingerprint !== fingerprint)
           throw new Error(
@@ -85,17 +142,17 @@ export class BasketStore {
       }
       const trip = update();
       const previousRow = this.db
-        .prepare("SELECT payload FROM trips WHERE id = ?")
-        .get(trip.id);
+        .prepare("SELECT payload FROM trips WHERE owner_id = ? AND id = ?")
+        .get(this.ownerId, trip.id);
       const previous = previousRow
         ? summarize(tripSchema.parse(JSON.parse(previousRow.payload as string)))
         : null;
       this.save(trip);
       this.db
         .prepare(
-          "INSERT INTO operations (id, fingerprint, trip_id) VALUES (?, ?, ?)",
+          "INSERT INTO operations (owner_id, id, fingerprint, trip_id) VALUES (?, ?, ?, ?)",
         )
-        .run(operationId, fingerprint, trip.id);
+        .run(this.ownerId, operationId, fingerprint, trip.id);
       const basket = summarize(trip);
       const newlyReachedThresholdsCents = basket.thresholds
         .filter(
@@ -124,44 +181,47 @@ export class BasketStore {
   startTrip(
     operationId: string,
     store = "Supermarket",
-    thresholdsCents = [2500, 5000],
+    thresholdsCents?: number[],
+    currency = "EUR",
   ): BasketResult {
-    return this.change(
-      operationId,
-      "start_trip",
-      { store, thresholdsCents },
-      () => ({
-        id: randomUUID(),
-        store,
-        thresholdsCents,
-        currency: "EUR",
-        timezone: "Europe/Dublin",
-        status: "active",
-        createdAt: new Date().toISOString(),
-        checkedOutAt: null,
-        items: [],
-      }),
-    );
+    currency = currencySchema.parse(currency);
+    thresholdsCents ??= defaultThresholds(currency);
+    // Preserve fingerprints for pre-currency EUR trip retries.
+    const input =
+      currency === "EUR"
+        ? { store, thresholdsCents }
+        : { store, thresholdsCents, currency };
+    return this.change(operationId, "start_trip", input, () => ({
+      id: randomUUID(),
+      store,
+      thresholdsCents: thresholdsCents!,
+      currency,
+      timezone: "Europe/Dublin",
+      status: "active",
+      createdAt: new Date().toISOString(),
+      checkedOutAt: null,
+      items: [],
+    }));
   }
 
   getBasket(id?: string) {
     if (id) return summarize(this.load(id));
     const row = this.db
       .prepare(
-        `SELECT id FROM trips ORDER BY
+        `SELECT id FROM trips WHERE owner_id = ? ORDER BY
       CASE WHEN json_extract(payload, '$.status') = 'active' THEN 0 ELSE 1 END,
       created_at DESC, rowid DESC LIMIT 1`,
       )
-      .get();
+      .get(this.ownerId);
     return row ? summarize(this.load(row.id as string)) : null;
   }
 
   listTrips(limit = 20) {
     return this.db
       .prepare(
-        "SELECT payload FROM trips ORDER BY created_at DESC, rowid DESC LIMIT ?",
+        "SELECT payload FROM trips WHERE owner_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?",
       )
-      .all(limit)
+      .all(this.ownerId, limit)
       .map((row) =>
         summarize(tripSchema.parse(JSON.parse(row.payload as string))),
       )
@@ -293,8 +353,8 @@ export class BasketStore {
   listExpiring(daysAhead = 3, today = dublinToday()) {
     const through = addDays(today, daysAhead);
     const items = this.db
-      .prepare("SELECT payload FROM trips")
-      .all()
+      .prepare("SELECT payload FROM trips WHERE owner_id = ?")
+      .all(this.ownerId)
       .flatMap((row) => {
         const trip = tripSchema.parse(JSON.parse(row.payload as string));
         return trip.items
@@ -307,6 +367,7 @@ export class BasketStore {
             tripId: trip.id,
             store: trip.store,
             tripStatus: trip.status,
+            currency: trip.currency,
             dateStatus:
               item.expiry!.date < today
                 ? "past_date"

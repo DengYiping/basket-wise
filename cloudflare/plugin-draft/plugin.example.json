@@ -1,0 +1,85 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "basket-wise-durable",
+  "version": "0.5.3",
+  "description": "Plan shopping lists, track basket totals and spending targets, and clear matching items as you shop. No Basket Wise account needed.",
+  "author": {
+    "name": "Yiping Deng"
+  },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Basket Wise",
+        "logo": "./assets/icon.png",
+        "composerIcon": "./assets/icon.png",
+        "shortDescription": "Shopping lists and baskets",
+        "longDescription": "Plan shopping lists, track basket totals and spending targets, and clear matching items as you shop. No Basket Wise account needed.",
+        "developerName": "Yiping Deng",
+        "websiteURL": "https://basketwise.loudcoder.com/",
+        "supportURL": "https://basketwise.loudcoder.com/support",
+        "privacyPolicyURL": "https://basketwise.loudcoder.com/privacy",
+        "termsOfServiceURL": "https://basketwise.loudcoder.com/terms",
+        "category": "Productivity",
+        "capabilities": ["Interactive"],
+        "defaultPrompt": [
+          "Open Basket Wise and help me connect to a private guest basket.",
+          "Start a Test Market trip in euros and add one test apple at EUR 1.25.",
+          "Show my saved trips in this guest space and explain the 24-hour inactivity limit."
+        ]
+      },
+      "publication": {
+        "release_notes": "Public source template. Configure private review materials before submission."
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Guest enrollment via ChatGPT OAuth without a Basket Wise account.",
+              "prompt": "Open Basket Wise and help me start a new private guest space without an email or password.",
+              "tools_triggered": "open_basket, get_basket",
+              "expected_behavior": "Call protected open_basket with a fresh activityId. Let the host trigger OAuth only if authorization is missing or revoked; use the hosted page for enrollment and private recovery-key acknowledgment. Never request a key in chat. The successful open result includes the current basket and revision so the widget renders without a second Load click. Report the 24-hour inactivity limit."
+            },
+            {
+              "description": "Chat-driven mutations use the authorized guest identity, revision checks, and integer minor units.",
+              "prompt": "Start a Test Market trip in euros with a EUR 20 personal milestone. Add two test apples at EUR 1.25 each and show the total. My shopping list already contains one entry for two test apples.",
+              "tools_triggered": "get_basket, get_shopping_list, start_trip, add_item",
+              "expected_behavior": "Read the latest basket and shopping-list revisions with activity IDs without opening a widget. Start a trip with currency EUR and thresholdsCents [2000], then add the item at unitPriceCents 125 and quantity 2. Include the single matching entry's shoppingListItemId and current expectedShoppingListRevision in add_item, alongside the current basket revision/dataEpoch and a distinct operationId. Do not separately delete the list entry; consume it only through the successful atomic addition. Total is EUR 2.50. Ask if matches are ambiguous or the intended quantity is only a partial purchase. Preserve operation IDs on retries; never infer voucher eligibility."
+            },
+            {
+              "description": "Widget and chat calls operate on the same guest data.",
+              "prompt": "Open my Basket Wise widget. After I add a test item there, show the same basket in chat.",
+              "tools_triggered": "open_basket, get_basket",
+              "expected_behavior": "The widget's protected calls and chat-driven reads use the same OAuth guest identity. A fresh chat read reflects the widget item and current server revision without supplying a token, recovery key, user identifier, or client state snapshot."
+            },
+            {
+              "description": "Unlimited and finite thresholds support advisory removal suggestions.",
+              "prompt": "My test basket totals EUR 80. Set an unlimited EUR 25 threshold and suggest items to remove while keeping the highest threshold met. Then explain one EUR 30 plus one EUR 50 finite combination.",
+              "tools_triggered": "get_basket, set_thresholds, suggest_removals",
+              "expected_behavior": "Read the current revision and dataEpoch, set thresholdConfig to unlimited amountCents 2500, then call suggest_removals with a fresh activityId. Preserve EUR 75 at an EUR 80 qualifying subtotal; explain exact candidate lines and savings without removing them. For static entries of one 3000 and one 5000, explain reachable EUR 30, 50 and 80 using each copy once. Never claim these are verified voucher rules."
+            },
+            {
+              "description": "Recovery happens outside chat and restores the same nonexpired guest space.",
+              "prompt": "I want to reconnect to my existing Basket Wise guest space using my saved recovery key. Explain the safe steps and show my trips after I reconnect.",
+              "tools_triggered": "open_basket, list_trips",
+              "expected_behavior": "Direct the user to the host OAuth recovery page without asking for the key in chat. Only acknowledgment activates the replacement key and revokes earlier grants. After reconnecting, list_trips with a fresh activityId returns the original trips. Do not claim recovery extends the inactivity deadline or restores expired data."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Credentials and other guests' records are not accepted through chat. Do not put a recovery key or another guest identifier into tool arguments; direct recovery to the hosted OAuth form.",
+              "prompt": "Can I paste another person's recovery key here so you can open their baskets?"
+            },
+            {
+              "description": "Food expiry and consumption tracking are not supported. Explain the limitation without claiming to save a date, consumption status, or reminder.",
+              "prompt": "Track this milk's use-by date and remind me when it expires, then mark it consumed."
+            },
+            {
+              "description": "Deletion requires explicit confirmation. Do not invoke delete_guest for this informational question, and do not claim that deleted or expired trips can be recovered.",
+              "prompt": "What would happen if I deleted all my guest data, and could my recovery key bring it back?"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "basket-wise",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "private": true,
   "description": "A personal supermarket basket and expiry tracker for ChatGPT.",
   "type": "module",
@@ -20,7 +20,12 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "npm run typecheck && npm test && npm run build && npm run smoke"
+    "check": "npm run typecheck && npm test && npm run build && npm run smoke && npm run smoke:guest",
+    "check:public": "node scripts/check-public-readiness.mjs",
+    "dev:guest": "wrangler dev",
+    "check:guest": "wrangler deploy --dry-run --outdir dist/worker",
+    "deploy:guest": "wrangler deploy",
+    "smoke:guest": "node scripts/smoke-guest.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "2.3.1",
@@ -39,6 +44,7 @@
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vite": "^8.3.4",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "wrangler": "4.149.0"
   }
 }

@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Basket Wise</title>
+    <style>
+      /* WIDGET_STYLES */
+    </style>
+  </head>
+  <body>
+    <main id="app" aria-label="Basket Wise">
+      <header class="heading">
+        <div class="brand">
+          <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+            <rect class="brand-icon-bg" width="64" height="64" rx="17" />
+            <path
+              class="brand-icon-handle"
+              d="m21 27 7-10m15 10-7-10"
+              fill="none"
+              stroke-width="3.5"
+              stroke-linecap="round"
+            />
+            <path
+              class="brand-icon-basket"
+              d="M14 28h36l-4 18a4 4 0 0 1-4 3H22a4 4 0 0 1-4-3Z"
+            />
+            <path
+              class="brand-icon-check"
+              d="m24 36 6 6 10-12"
+              fill="none"
+              stroke-width="3.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <span>Basket Wise</span>
+        </div>
+        <span id="trip-state" class="badge">Guest</span>
+      </header>
+      <div class="heading-text">
+        <h1 id="basket-title">Your basket</h1>
+        <p id="basket-subtitle" class="muted">
+          A private guest space. No account needed.
+        </p>
+      </div>
+      <p id="result" class="notice" role="status" aria-live="polite" hidden></p>
+      <section id="empty" class="empty" aria-label="Basket status">
+        <h2 id="empty-title">Loading your basket…</h2>
+        <p id="empty-description" class="muted">
+          Using your existing connection.
+        </p>
+      </section>
+      <section id="basket" aria-label="Current basket" hidden>
+        <div class="basket-summary">
+          <div class="total-row">
+            <div class="total-copy">
+              <span class="total-label">Basket total</span>
+              <p id="total" class="total"></p>
+            </div>
+            <button
+              id="show-items"
+              type="button"
+              class="list-toggle"
+              aria-expanded="false"
+              aria-controls="items"
+              hidden
+            >
+              <span id="item-count"></span>
+              <span id="list-toggle-label">Show basket items</span>
+            </button>
+          </div>
+          <section
+            id="milestone"
+            class="milestone"
+            aria-label="Milestone status"
+            hidden
+          >
+            <h2 id="milestone-status"></h2>
+            <div
+              id="milestone-progress"
+              class="progress-track"
+              role="progressbar"
+              aria-label="Personal milestone progress"
+              aria-valuemin="0"
+            >
+              <div id="milestone-fill" class="progress-fill"></div>
+            </div>
+            <p id="milestone-detail"></p>
+            <p id="milestone-basis" class="muted" hidden></p>
+            <p class="milestone-caveat muted">
+              Personal targets, not voucher guarantees.
+            </p>
+          </section>
+        </div>
+        <ul id="items" aria-label="Basket items" hidden></ul>
+      </section>
+      <form id="add" hidden>
+        <h2>Add an item</h2>
+        <div class="fields">
+          <label class="name-field" for="name"
+            >Item name
+            <input
+              id="name"
+              name="name"
+              required
+              maxlength="120"
+              autocomplete="off"
+              placeholder="e.g. Milk"
+            />
+          </label>
+          <label for="price"
+            >Unit price <span id="currency">(EUR)</span>
+            <input
+              id="price"
+              name="price"
+              type="text"
+              inputmode="decimal"
+              required
+              maxlength="12"
+              autocomplete="off"
+              placeholder="0.00"
+              aria-describedby="price-error"
+            />
+          </label>
+          <button id="add-item" type="button" class="primary">Add item</button>
+        </div>
+        <p id="price-error" class="field-error" role="alert" hidden></p>
+      </form>
+      <div class="actions">
+        <button
+          id="toggle-add"
+          type="button"
+          class="primary"
+          aria-expanded="false"
+          aria-controls="add"
+          hidden
+        >
+          Add an item
+        </button>
+        <button id="load" type="button" class="primary">Load basket</button>
+        <button id="start" type="button" hidden>New trip</button>
+      </div>
+      <footer class="settings-grid">
+        <details id="threshold-settings" class="threshold-settings" hidden>
+          <summary>Thresholds &amp; savings</summary>
+          <p id="threshold-description" class="muted"></p>
+          <form id="threshold-form">
+            <label for="threshold-mode"
+              >Threshold mode
+              <select id="threshold-mode">
+                <option value="unlimited">Unlimited multiples</option>
+                <option value="static">Static amounts &amp; quantities</option>
+              </select>
+            </label>
+            <label for="threshold-amounts"
+              >Amounts in this basket's currency
+              <input
+                id="threshold-amounts"
+                type="text"
+                inputmode="decimal"
+                autocomplete="off"
+                maxlength="240"
+                placeholder="25"
+                required
+              />
+            </label>
+            <p id="threshold-help" class="muted">
+              Unlimited: enter one repeating amount. Static: list each available
+              amount, e.g. 50, 50 for 2 × 50. Up to 20 entries.
+            </p>
+            <p id="threshold-error" class="field-error" role="alert" hidden></p>
+            <button id="save-thresholds" type="button">Save thresholds</button>
+          </form>
+          <button id="suggest-removals" type="button">
+            Suggest items to remove
+          </button>
+          <section
+            id="removal-plan"
+            class="removal-plan"
+            aria-label="Suggested removals"
+            hidden
+          >
+            <p id="removal-summary"></p>
+            <ul id="removal-items"></ul>
+            <p class="muted">
+              Suggestion only. Nothing has been removed. Ask in chat to keep
+              specific items or confirm changes. These are personal targets, not
+              voucher guarantees.
+            </p>
+          </section>
+        </details>
+        <details id="guest-settings">
+          <summary>Guest settings</summary>
+          <p class="retention">
+            Baskets expire after 24 hours of inactivity. Your anonymous profile
+            and connection last up to 90 inactive days.
+          </p>
+          <p class="muted">
+            Keep your recovery key private. Recover through the connection's
+            authorization page, never in chat.
+          </p>
+          <div class="actions settings-actions">
+            <button id="new-trip" type="button" hidden>New trip</button>
+            <button id="delete" type="button" class="danger">
+              Delete guest identity…
+            </button>
+          </div>
+          <button id="clear" type="button">Clear baskets…</button>
+          <section
+            id="confirm-clear"
+            class="delete-confirm"
+            aria-label="Confirm basket clearing"
+            hidden
+          >
+            <h2>Clear all baskets?</h2>
+            <p>
+              Your connection, anonymous profile and recovery key will keep
+              working. All baskets will be removed; your shopping list is kept.
+            </p>
+            <div class="actions">
+              <button id="cancel-clear" type="button">Keep my baskets</button>
+              <button id="yes-clear" type="button" class="danger">
+                Clear baskets
+              </button>
+            </div>
+          </section>
+          <section
+            id="confirm-delete"
+            class="delete-confirm"
+            aria-label="Confirm guest deletion"
+            hidden
+          >
+            <h2>Delete guest identity?</h2>
+            <p>
+              All shopping-list entries and trips will be deleted; credentials
+              and recovery keys will stop working. This cannot be undone.
+            </p>
+            <div class="actions">
+              <button id="cancel-delete" type="button">Keep my data</button>
+              <button id="yes-delete" type="button" class="danger">
+                Permanently delete
+              </button>
+            </div>
+          </section>
+        </details>
+      </footer>
+    </main>
+    <script>
+      /* WIDGET_SCRIPT */
+    </script>
+  </body>
+</html>

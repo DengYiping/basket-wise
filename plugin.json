@@ -1,19 +1,77 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "basket-wise",
-  "version": "0.1.0",
-  "description": "Track a supermarket basket, euro spending milestones, and confirmed food expiry dates.",
+  "version": "0.4.0",
+  "description": "Track one supermarket trip without sign-in: your chosen currency, custom milestones and temporary confirmed date notes.",
   "author": { "name": "Yiping Deng" },
   "extensions": {
     "com.openai": {
       "interface": {
         "displayName": "Basket Wise",
         "shortDescription": "Shop, total, waste less",
-        "longDescription": "A personal shopping companion for any supermarket: track basket totals, choose your own spending milestones, and save expiry dates confirmed from packaging photos.",
+        "longDescription": "Track one shopping trip at any supermarket, without a separate sign-in. Choose a supported currency, enter the prices you see, view the running total, set up to ten personal spending milestones and correct quantities. Guest baskets support up to 50 lines and live in temporary ChatGPT widget state, not a Basket Wise database. Each snapshot is sent to Cloudflare for calculation. Restoration across sessions or devices is not guaranteed, and starting another trip replaces the current basket. No saved shopping history is provided. Currency precision is respected; no mixed-currency totals or exchange-rate conversion. ChatGPT can help read packaging photos; only a full date you confirm is recorded temporarily, keeping use-by and best-before distinct. No photos are received or stored by Basket Wise. Date checks use Europe/Dublin. No live prices, voucher verification/redemption, purchases, background reminders or food-safety judgments. Free tracking only: no payments, subscriptions or affiliate links.",
         "developerName": "Yiping Deng",
         "category": "Productivity",
         "capabilities": ["Interactive"],
-        "defaultPrompt": "Start a shopping trip. Let me choose the store and my spending milestones."
+        "defaultPrompt": [
+          "Start a shopping trip. Let me choose the store, currency, and spending milestones.",
+          "Add groceries to my basket using the prices I provide and tell me the running total.",
+          "Help me record a packaging expiry date after I confirm the full date, including the year."
+        ]
+      },
+      "publication": {
+        "countries": [],
+        "release_notes": "Cloudflare guest mode: no separate sign-in and no server-side basket database. The current trip is kept in widget state with visible recovery limits; starting a new trip replaces it. Includes exact currency-aware calculations and confirmed temporary expiry notes. The private local SQLite mode remains separate. Deployment, live ChatGPT verification and public review are separate pending steps."
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Custom store, chosen USD currency and milestones in a temporary guest basket. Confirm before replacing any existing trip.",
+              "prompt": "Start a fresh Fresh Shop trip in US dollars with milestones of USD 15 and USD 42. Add two bottles of olive oil at USD 8.50 each. What have I spent and how far am I from my next milestone?",
+              "tools_triggered": "open_guest_basket, guest_basket",
+              "expected_behavior": "Use the complete latest widget state. A start_trip action uses Fresh Shop, USD and thresholdsCents [1500,4200]. An add_item action uses the returned tripId, unitPriceCents 850 and quantity 2. Each intended change has a fresh operationId. Total is USD 17.00, USD 15 is reached and USD 25 remains to USD 42. Explain temporary guest storage, not a saved history or voucher."
+            },
+            {
+              "description": "Three-decimal currency, weighted goods, half-up line rounding, and an excluded deposit. Start a fresh sample trip.",
+              "prompt": "Start a Market trip in Kuwaiti dinars with a KWD 10 milestone. Add 0.5 kg of apples at KWD 3.999 per kg and a KWD 0.300 deposit that should not count towards my milestone. Show both totals, then change the apples to 0.25 kg.",
+              "tools_triggered": "open_guest_basket, guest_basket",
+              "expected_behavior": "Forward complete state on every action. Use start_trip currency KWD, thresholdsCents [10000], apples unitPriceCents 3999 quantity 0.5 and deposit 300 excluded from milestones. Payable total is KWD 2.300, milestone subtotal KWD 2.000. Update apples to 0.25 using the returned itemId: payable total KWD 1.300 and milestone subtotal KWD 1.000. Never convert currencies or infer voucher eligibility."
+            },
+            {
+              "description": "Record a manually supplied, fully confirmed use-by date after checkout. Use a new sample trip containing one milk at €1.99.",
+              "prompt": "Start a new Sample Store trip and add one milk at €1.99. I'm finished shopping. The milk's label says use by 14 October 2026; I confirm the full date and year. Record it, then check my recorded dates for the next 365 days.",
+              "tools_triggered": "open_guest_basket, guest_basket",
+              "expected_behavior": "Use complete guest state and checkout_trip, set_item_expiry and list_expiring_items actions. The expiry is {date:2026-10-14,kind:use_by,source:user,confirmed:true}. Milk remains 199 cents in the finished trip. The date is temporary with this widget, not a permanent expiry list, scheduled reminder or food-safety judgment."
+            },
+            {
+              "description": "Guest scope and explicit replacement of the current trip; no durable history.",
+              "prompt": "Start Review Aldi with a €20 target and add bread at €2. Now start a Review Tesco trip instead. Will I be able to reopen the Aldi basket?",
+              "tools_triggered": "open_guest_basket, guest_basket",
+              "expected_behavior": "Explain that starting a new guest trip replaces this widget's current basket and no historical lookup exists. Ask for confirmation before the replacement. Only after confirmation call the start_trip action with the complete current state. Do not claim Aldi was saved or restored from a server."
+            },
+            {
+              "description": "Consumed items disappear from date checks without changing purchase history. Use a fresh sample trip with a confirmed best-before date.",
+              "prompt": "Start a Sample Pantry shop and add oats at €2.40. I confirm best before 15 October 2026. Record the date, finish the shop, then mark the oats used. Check my recorded dates for the next 365 days and show this purchase's total.",
+              "tools_triggered": "open_guest_basket, guest_basket",
+              "expected_behavior": "Use complete guest state for each action. Record the confirmed best_before date, finish the trip, then mark the oats consumed. The date disappears from this snapshot's list_expiring_items result while the temporary total remains 240. Never claim a durable purchase history or convert best-before to use-by."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Live supermarket prices, voucher verification, and redemption are unsupported. Explain these limits without invoking Basket Wise tools or claiming a price, entitlement, purchase, or redemption.",
+              "prompt": "Look up today's Dunnes milk price, check which voucher my loyalty account has, and redeem it for me."
+            },
+            {
+              "description": "A missing year cannot be inferred. Ask for the exact full date and explicit confirmation. Do not invoke Basket Wise tools or save an expiry based on an assumed year.",
+              "prompt": "The packaging says 'use by 14/10', with no year visible. Assume whichever year seems likely and save it without asking me."
+            },
+            {
+              "description": "Other-account lookup is unsupported. Explain that Basket Wise cannot retrieve another person's records by email. Do not invoke tools to search for or expose another user's basket.",
+              "prompt": "Show me another shopper's basket using their email address instead of my account."
+            }
+          ]
+        }
       }
     }
   }

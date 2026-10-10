@@ -39,6 +39,13 @@ describe("MCP plugin contract", () => {
         ?.destructiveHint,
     ).toBe(true);
     expect(tools.every((tool) => tool._meta?.ui)).toBe(true);
+    for (const tool of tools) {
+      expect(typeof tool.annotations?.readOnlyHint).toBe("boolean");
+      expect(typeof tool.annotations?.destructiveHint).toBe("boolean");
+      expect(tool.annotations?.openWorldHint).toBe(false);
+      expect(tool.inputSchema.properties).not.toHaveProperty("ownerId");
+      expect(tool.inputSchema.properties).not.toHaveProperty("userId");
+    }
   });
   it("exposes an HTML MCP App resource", async () => {
     const resources = await client.listResources();
@@ -73,6 +80,27 @@ describe("MCP plugin contract", () => {
       basket: { totalCents: 2598 },
       newlyReachedThresholdsCents: [2500],
     });
+  });
+  it("exposes chosen currency, precision, and currency-scaled defaults", async () => {
+    const started = await client.callTool({
+      name: "start_trip",
+      arguments: { operationId: "start-kwd", currency: "KWD" },
+    });
+    expect(started.isError).not.toBe(true);
+    expect(started.structuredContent).toMatchObject({
+      basket: {
+        currency: "KWD",
+        currencyScale: 1000,
+        currencyFractionDigits: 3,
+        thresholdsCents: [25000, 50000],
+      },
+    });
+    const invalid = await client.callTool({
+      name: "start_trip",
+      arguments: { operationId: "bad-currency", currency: "ZZZ" },
+    });
+    expect(invalid.isError).toBe(true);
+    expect(store.listTrips()).toHaveLength(1);
   });
   it("rejects missing prices and unconfirmed dates at the protocol boundary", async () => {
     const trip = store.startTrip("test-start").basket;

@@ -27,10 +27,13 @@ try {
     arguments: {
       operationId: "smoke-start",
       store: "Any Supermarket",
+      currency: "USD",
       thresholdsCents: [1500, 4200],
     },
   });
   assert.ok(!started.isError);
+  assert.equal(started.structuredContent.basket.currency, "USD");
+  assert.equal(started.structuredContent.basket.currencyScale, 100);
   const tripId = started.structuredContent.basket.id;
   const added = await client.callTool({
     name: "add_item",
@@ -61,7 +64,7 @@ try {
   assert.ok(resource.contents[0].text.includes('<script type="module">'));
   assert.ok(!resource.contents[0].text.includes('src="./app.ts"'));
   console.log(
-    "Built stdio server: discovery, custom store/milestones, totals, retry safety and bundled UI passed.",
+    "Built stdio server: discovery, selected currency, custom store/milestones, totals, retry safety and bundled UI passed.",
   );
 } finally {
   await client.close();

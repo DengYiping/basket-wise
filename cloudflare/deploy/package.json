@@ -1,0 +1,19 @@
+{
+  "name": "basket-wise-cloudflare-deploy",
+  "version": "0.5.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "cf build",
+    "dry-run": "cf deploy --dry-run",
+    "deploy": "cf deploy --secrets-file .secrets.production.json",
+    "init-secrets": "node init-secrets.mjs",
+    "smoke": "node smoke.mjs",
+    "smoke:oauth": "node smoke-oauth.mjs --allow-test-guest",
+    "smoke:dcr": "node smoke-oauth.mjs --allow-test-guest --dcr"
+  },
+  "devDependencies": {
+    "cf": "1.0.0-beta.13",
+    "wrangler": "4.149.0"
+  }
+}

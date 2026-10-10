@@ -28,6 +28,14 @@ const html = template
   );
 await mkdir("dist/web", { recursive: true });
 await writeFile("dist/web/index.html", html);
+await mkdir("dist/guest", { recursive: true });
+await writeFile(
+  "dist/guest/index.html",
+  html.replace(
+    'name="basket-wise-mode" content="local"',
+    'name="basket-wise-mode" content="guest"',
+  ),
+);
 console.log(
   `Built self-contained basket view (${Buffer.byteLength(html)} bytes).`,
 );

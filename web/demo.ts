@@ -2,6 +2,8 @@ import { randomUUID } from "./utils.js";
 import {
   addDays,
   dublinToday,
+  currencySchema,
+  defaultThresholds,
   summarize,
   type Expiry,
   type Trip,
@@ -100,11 +102,14 @@ export function createDemo() {
       };
     let trip = trips.find((value) => value.id === args.tripId) ?? trips[0]!;
     if (name === "start_trip") {
+      const currency = currencySchema.parse(args.currency ?? "EUR");
       trip = {
         ...trip,
         id: randomUUID(),
         store: String(args.store ?? "Supermarket"),
-        thresholdsCents: (args.thresholdsCents as number[]) ?? [2500, 5000],
+        currency,
+        thresholdsCents:
+          (args.thresholdsCents as number[]) ?? defaultThresholds(currency),
         createdAt: new Date().toISOString(),
         checkedOutAt: null,
         status: "active",

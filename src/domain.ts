@@ -1,6 +1,34 @@
 import { z } from "zod";
+import { CURRENCY_MINOR_DIGITS, SUPPORTED_CURRENCIES } from "./currencies.js";
+export { SUPPORTED_CURRENCIES } from "./currencies.js";
 
 export const MAX_ITEMS = 500;
+const currencyCodes = new Set(SUPPORTED_CURRENCIES);
+export const currencySchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .refine(
+    (code) => currencyCodes.has(code),
+    "Choose a supported ISO currency code.",
+  );
+
+export function currencyDigits(currency: string): number {
+  const code = currencySchema.parse(currency);
+  return CURRENCY_MINOR_DIGITS[code]!;
+}
+
+export function currencyScale(currency: string): number {
+  return 10 ** currencyDigits(currency);
+}
+
+export function defaultThresholds(currency: string): number[] {
+  const scale = currencyScale(currency);
+  return [25 * scale, 50 * scale];
+}
+
+// Keep the existing *Cents field names for stored data and client compatibility.
+// They represent integer minor units of the trip currency, not always cents.
 export const moneySchema = z.number().int().min(0).max(1_000_000);
 export const operationSchema = z
   .string()
@@ -40,7 +68,7 @@ export const expirySchema = z.object({
 export const itemInputSchema = z.object({
   name: z.string().trim().min(1).max(120),
   unitPriceCents: moneySchema.describe(
-    "EUR cents per unit, e.g. €3.49 is 349. Include VAT; never estimate a missing price.",
+    "Integer minor units of the trip currency (legacy field name): EUR/USD 3.49 = 349, JPY 349 = 349, KWD 3.490 = 3490. Use the basket currencyScale; never convert currencies or estimate a missing price.",
   ),
   quantity: quantitySchema.default(1),
   unit: z.enum(["each", "kg", "litre"]).default("each"),
@@ -56,7 +84,7 @@ export const itemInputSchema = z.object({
 export const tripSchema = z.object({
   id: idSchema,
   store: z.string().trim().min(1).max(120),
-  currency: z.literal("EUR"),
+  currency: currencySchema,
   timezone: z.literal("Europe/Dublin"),
   createdAt: z.iso.datetime(),
   checkedOutAt: z.iso.datetime().nullable(),
@@ -98,6 +126,8 @@ export function summarize(trip: Trip) {
   );
   return {
     ...trip,
+    currencyFractionDigits: currencyDigits(trip.currency),
+    currencyScale: currencyScale(trip.currency),
     items,
     totalCents,
     thresholdSubtotalCents,
@@ -119,20 +149,48 @@ export type BasketResult = {
   alreadyApplied: boolean;
 };
 
-export function formatEuro(cents: number): string {
+export function formatMoney(minorUnits: number, currency: string): string {
   return new Intl.NumberFormat("en-IE", {
     style: "currency",
-    currency: "EUR",
-  }).format(cents / 100);
+    currency: currencySchema.parse(currency),
+    currencyDisplay: "code",
+    minimumFractionDigits: currencyDigits(currency),
+    maximumFractionDigits: currencyDigits(currency),
+  }).format(minorUnits / currencyScale(currency));
 }
 
-export function parseEuro(input: string): number {
-  if (!/^\d{1,5}(\.\d{1,2})?$/.test(input.trim()))
-    throw new Error("Enter a price such as 3.49.");
+/** Plain decimal entry, parsed without floating-point money arithmetic. */
+export function parseMoney(input: string, currency: string): number {
+  const digits = currencyDigits(currency);
+  const pattern = new RegExp(
+    `^\\d{1,7}${digits ? `(\\.\\d{1,${digits}})?` : ""}$`,
+  );
+  if (!pattern.test(input.trim()))
+    throw new Error(
+      digits
+        ? `Enter a ${currency} amount with a decimal point and at most ${digits} decimal places.`
+        : `Enter a whole-number ${currency} amount, without decimal places.`,
+    );
   const [whole = "0", fraction = ""] = input.trim().split(".");
   return moneySchema.parse(
-    Number(whole) * 100 + Number(fraction.padEnd(2, "0")),
+    Number(whole) * currencyScale(currency) +
+      Number(fraction.padEnd(digits, "0")),
   );
+}
+
+/** Exact editable decimal representation; no currency symbol or grouping. */
+export function moneyInputValue(minorUnits: number, currency: string): string {
+  const digits = currencyDigits(currency);
+  const scale = currencyScale(currency);
+  const whole = Math.floor(minorUnits / scale);
+  return digits
+    ? `${whole}.${String(minorUnits % scale).padStart(digits, "0")}`
+    : String(whole);
+}
+
+// Compatibility helper for existing EUR-only callers.
+export function parseEuro(input: string): number {
+  return parseMoney(input, "EUR");
 }
 
 export function dublinToday(now = new Date()): string {
