@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en-IE">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Basket Wise</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main id="app" aria-busy="true">
+      <header class="app-header">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">bw.</span>
+          <div>
+            <h1>Basket Wise</h1>
+            <p>A little more mindful, aisle by aisle.</p>
+          </div>
+        </div>
+        <span id="mode" class="pill">Connecting</span>
+      </header>
+      <div id="message" role="status" aria-live="polite" hidden></div>
+      <section id="empty" class="empty" hidden>
+        <span class="empty-icon" aria-hidden="true">↗</span>
+        <h2>Your next shop starts here.</h2>
+        <p>
+          Keep a running total, find your spending milestones, and remember what
+          needs using first.
+        </p>
+        <button id="start" class="primary">
+          Start a shop <span aria-hidden="true">→</span>
+        </button>
+      </section>
+      <div id="basket-content" hidden>
+        <div class="trip-bar">
+          <div>
+            <span class="eyebrow">SHOPPING AT</span>
+            <h2 id="store-name"></h2>
+          </div>
+          <select id="trip-select" aria-label="Choose shopping trip"></select
+          ><button id="new-trip" class="quiet">+ New shop</button>
+        </div>
+        <section class="total-card" aria-label="Basket total">
+          <div>
+            <span class="eyebrow">YOUR RUNNING TOTAL</span>
+            <p id="total" class="total">€0.00</p>
+            <span id="item-count" class="total-caption"></span>
+          </div>
+          <div class="total-aside">
+            <span id="trip-status" class="pill"></span
+            ><span class="total-note">Little things<br />add up.</span>
+          </div>
+        </section>
+        <section class="milestones" aria-label="Spending milestones">
+          <div class="section-heading">
+            <h3>Aim for your sweet spot</h3>
+            <button id="edit-thresholds" class="text-button">
+              Edit milestones
+            </button>
+          </div>
+          <div id="thresholds" class="threshold-grid"></div>
+          <p id="qualifying-note" class="fine-print"></p>
+        </section>
+        <nav class="tabs" aria-label="Shopping views">
+          <button id="basket-tab" aria-pressed="true">
+            Your basket <span id="basket-count"></span></button
+          ><button id="expiry-tab" aria-pressed="false">
+            Use soon <span aria-hidden="true">◷</span>
+          </button>
+        </nav>
+        <section id="basket-panel">
+          <form id="add-form" class="add-form">
+            <label class="name-field"
+              >Item name<input
+                id="item-name"
+                name="name"
+                placeholder="What did you pick up?"
+                maxlength="120"
+                required
+            /></label>
+            <label
+              >Price / unit (€)<input
+                id="item-price"
+                name="price"
+                placeholder="0.00"
+                inputmode="decimal"
+                required
+            /></label>
+            <label class="quantity-field"
+              >Qty<input
+                id="item-quantity"
+                name="quantity"
+                type="number"
+                value="1"
+                min="0.001"
+                max="1000"
+                step="0.001"
+                required
+            /></label>
+            <label class="unit-field"
+              >Unit<select id="item-unit">
+                <option value="each">each</option>
+                <option value="kg">kg</option>
+                <option value="litre">litre</option>
+              </select></label
+            >
+            <button type="submit" class="primary add-button">
+              Add <span aria-hidden="true">+</span>
+            </button>
+          </form>
+          <div id="items" class="item-list"></div>
+          <div class="checkout-bar">
+            <p id="checkout-note" class="fine-print">
+              Your estimate, not a checkout receipt.
+            </p>
+            <button id="checkout" class="primary">
+              Finish shopping <span aria-hidden="true">✓</span>
+            </button>
+          </div>
+        </section>
+        <section id="expiry-panel" hidden>
+          <div class="expiry-intro">
+            <h3>Good food. Less forgotten.</h3>
+            <p>
+              Items dated in the next 3 days, plus dates already passed. Attach
+              a label photo in chat to have ChatGPT read it; confirm the date
+              before saving.
+            </p>
+          </div>
+          <button id="refresh-expiry" class="quiet">Refresh dates</button>
+          <div id="expiry-items" class="item-list"></div>
+          <p class="fine-print">
+            Use-by and best-before labels are kept distinct. These are date
+            records, not advice that food is safe to eat. Checks run only when
+            you open or refresh this view.
+          </p>
+        </section>
+      </div>
+      <footer>Your store. Your milestones. Your shop.</footer>
+    </main>
+    <dialog id="start-dialog">
+      <form id="start-form">
+        <div class="section-heading">
+          <h2>Make this shop yours</h2>
+          <button
+            type="button"
+            id="close-start"
+            class="icon-button"
+            aria-label="Close new shop dialog"
+          >
+            ×
+          </button>
+        </div>
+        <p>Any supermarket. Whatever milestones work for you.</p>
+        <label
+          >Store name<input
+            id="start-store"
+            placeholder="e.g. Dunnes, Tesco, Lidl"
+            maxlength="120" /></label
+        ><label
+          >Spending milestones (€)<input
+            id="start-thresholds"
+            value="25, 50"
+            required
+        /></label>
+        <p class="fine-print">
+          Comma-separated euro amounts. These are your tracking targets, not
+          store voucher terms.
+        </p>
+        <button type="submit" class="primary">Start shopping →</button>
+      </form>
+    </dialog>
+    <dialog id="expiry-dialog">
+      <form id="expiry-form">
+        <div class="section-heading">
+          <h2>Remember the date</h2>
+          <button
+            type="button"
+            id="close-expiry"
+            class="icon-button"
+            aria-label="Close expiry dialog"
+          >
+            ×
+          </button>
+        </div>
+        <p id="expiry-item-name"></p>
+        <label
+          >Date on the label<input id="expiry-date" type="date" required
+        /></label>
+        <label
+          >Label type<select id="expiry-kind">
+            <option value="use_by">Use by</option>
+            <option value="best_before">Best before</option>
+            <option value="unknown">Not specified</option>
+          </select></label
+        >
+        <label
+          >Original label text (optional)<input
+            id="expiry-label"
+            maxlength="250"
+            placeholder="e.g. Use by 14 OCT 2026"
+        /></label>
+        <label class="checkbox-label"
+          ><input id="expiry-confirmed" type="checkbox" required />I confirm
+          this is the exact date, including the year.</label
+        >
+        <button type="submit" class="primary">Save date</button>
+      </form>
+    </dialog>
+    <dialog id="threshold-dialog">
+      <form id="threshold-form">
+        <div class="section-heading">
+          <h2>Your spending milestones</h2>
+          <button
+            type="button"
+            id="close-thresholds"
+            class="icon-button"
+            aria-label="Close milestones dialog"
+          >
+            ×
+          </button>
+        </div>
+        <p>
+          Enter euro amounts separated by commas. These are personal targets,
+          not verified voucher terms.
+        </p>
+        <label
+          >Milestones (€)<input
+            id="threshold-input"
+            value="25, 50"
+            required /></label
+        ><button type="submit" class="primary">Save milestones</button>
+      </form>
+    </dialog>
+    <script type="module" src="./app.ts"></script>
+  </body>
+</html>

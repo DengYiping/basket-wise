@@ -1,0 +1,20 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "basket-wise",
+  "version": "0.1.0",
+  "description": "Track a supermarket basket, euro spending milestones, and confirmed food expiry dates.",
+  "author": { "name": "Yiping Deng" },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Basket Wise",
+        "shortDescription": "Shop, total, waste less",
+        "longDescription": "A personal shopping companion for any supermarket: track basket totals, choose your own spending milestones, and save expiry dates confirmed from packaging photos.",
+        "developerName": "Yiping Deng",
+        "category": "Productivity",
+        "capabilities": ["Interactive"],
+        "defaultPrompt": "Start a shopping trip. Let me choose the store and my spending milestones."
+      }
+    }
+  }
+}
